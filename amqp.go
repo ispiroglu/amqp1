@@ -2,7 +2,10 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"log/slog"
+	"os"
 
 	"github.com/Azure/go-amqp"
 )
@@ -14,13 +17,30 @@ type broker struct {
 }
 
 func connectToBroker(ctx context.Context, addr string) *broker {
-	conn, err := amqp.Dial(ctx, addr, &amqp.ConnOptions{})
+	conn, err := amqp.Dial(ctx, addr, &amqp.ConnOptions{
+		TLSConfig: sasl(),
+	})
 	if err != nil {
 		slog.Error("Failed to connect amqp broker", slog.String("addr", addr))
 	}
 
 	return &broker{
 		conn: conn,
+	}
+}
+
+func sasl() *tls.Config {
+	caCert, err := os.ReadFile("certificate.cer")
+	if err != nil {
+		slog.Error("Reading CA certificate:", slog.String("err", err.Error()))
+		panic(err)
+	}
+
+	caCertPool := x509.NewCertPool()
+	caCertPool.AppendCertsFromPEM(caCert)
+
+	return &tls.Config{
+		RootCAs: caCertPool,
 	}
 }
 
