@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/pem"
 	"log/slog"
 	"os"
 
@@ -20,6 +21,7 @@ func connectToBroker(ctx context.Context, addr string) *broker {
 	conn, err := amqp.Dial(ctx, addr, &amqp.ConnOptions{
 		TLSConfig: sasl(),
 	})
+
 	if err != nil {
 		slog.Error("Failed to connect amqp broker", slog.String("addr", addr))
 	}
@@ -36,11 +38,27 @@ func sasl() *tls.Config {
 		panic(err)
 	}
 
+	block, _ := pem.Decode(caCert)
+	if block == nil {
+		panic("failed to decode PEM block")
+	}
+
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		panic(err)
+	}
+
 	caCertPool := x509.NewCertPool()
 	caCertPool.AppendCertsFromPEM(caCert)
 
 	return &tls.Config{
-		RootCAs: caCertPool,
+		Certificates: []tls.Certificate{
+			{
+				Certificate: [][]byte{cert.Raw},
+			},
+		},
+		RootCAs:    caCertPool,
+		MinVersion: tls.VersionSSL30,
 	}
 }
 
